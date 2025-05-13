@@ -1,145 +1,444 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Three.js Rotating Square</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arena Game with Buildings</title>
   <style>
-    /* Basic page styles */
     body {
       margin: 0;
+      padding: 0;
       overflow: hidden;
-      font-family: Arial, sans-serif;
+      background-color: #000;
     }
-    canvas {
-      display: block;
-    }
-
-    /* Loader overlay styles */
-    .loader-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    backdrop-filter: blur(16px);
-    background-color: rgba(255, 255, 255, 0.5);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    z-index: 2000;
-    transition: opacity 0.5s ease;
-  }
-  
-  .loader {
-    --color: #a5a5b0;
-    --size: 70px;
-    width: var(--size);
-    height: var(--size);
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 5px;
-    margin-bottom: 20px;
-  }
-  
-  .loader span {
-    width: 100%;
-    height: 100%;
-    background-color: var(--color);
-    animation: keyframes-blink 0.6s alternate infinite linear;
-  }
-  
-  .loader span:nth-child(1) { animation-delay: 0ms; }
-  .loader span:nth-child(2) { animation-delay: 200ms; }
-  .loader span:nth-child(3) { animation-delay: 300ms; }
-  .loader span:nth-child(4) { animation-delay: 400ms; }
-  .loader span:nth-child(5) { animation-delay: 500ms; }
-  .loader span:nth-child(6) { animation-delay: 600ms; }
-  
-  /* Percentage indicator styles */
-  .loader-percentage {
-    font-size: 32px;
-    font-weight: bold;
-    color: #333;
-    margin: 10px 0;
-  }
-  
-  /* Loading text styles */
-  .loader-text {
-    font-size: 18px;
-    color: #555;
-    margin: 5px 0;
-  }
-  
-  /* Tip text styles */
-  .loader-tip {
-    margin-top: 15px;
-    font-size: 14px;
-    color: #777;
-    font-style: italic;
-  }
-  
-  /* Progress bar container */
-  .progress-container {
-    width: 300px;
-    height: 6px;
-    background-color: #e0e0e0;
-    border-radius: 3px;
-    margin-top: 20px;
-    overflow: hidden;
-  }
-  
-  /* Progress bar */
-  .progress-bar {
-    height: 100%;
-    width: 0%;
-    background-color: #7c5834; /* Match the sauna theme color */
-    transition: width 0.3s ease;
-  }
-  
-  @keyframes keyframes-blink {
-    0% {
-      opacity: 0.3;
-      transform: scale(0.5) rotate(5deg);
-    }
-    50% {
-      opacity: 1;
-      transform: scale(1);
-    }
-  }
     
+    #instructions {
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      background-color: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 10px;
+      border-radius: 5px;
+      font-family: Arial, sans-serif;
+      z-index: 100;
+      max-width: 400px;
+    }
+    
+    #building-tools {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background-color: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 10px;
+      border-radius: 5px;
+      font-family: Arial, sans-serif;
+      z-index: 100;
+    }
+    
+    button {
+      background-color: #4CAF50;
+      border: none;
+      color: white;
+      padding: 8px 12px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 14px;
+      margin: 4px 2px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    
+    button:hover {
+      background-color: #45a049;
+    }
+    
+    #key-debug {
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      background-color: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 10px;
+      border-radius: 5px;
+      font-family: monospace;
+      z-index: 100;
+      max-width: 300px;
+    }
   </style>
-  <script>
-    // Add this script to index.html to update the progress bar
-   // document.addEventListener('DOMContentLoaded', function() {
-      //const progressBar = document.getElementById('progress-bar');
-      
-     // window.addEventListener('modelLoadProgress', function(event) {
-     //   const progress = event.detail.progress;
-     //   if (progressBar) {
-        //  progressBar.style.width = `${Math.min(progress, 100)}%`;
-       // }
-     // });
-   // });
-  </script>
 </head>
 <body>
-
-<div class="loader-overlay" id="loader-overlay">
-  <div class="loader">
-    <span></span>
-    <span></span>
-    <span></span>
-    <span></span>
-    <span></span>
-    <span></span>
-  </div> 
-  <div class="loader-percentage" id="loader-percentage">0%</div>
-  <div class="loader-text">Loading...</div>
-  <!-- <div class="loader-tip">Large 3D model - this may take a moment</div>  -->
-
-  <!-- Your Three.js application -->
+  <div id="instructions">
+    <h3>Arena Game with Buildings</h3>
+    <p>WASD to move, mouse to look around, Space to jump, Shift to run</p>
+    <p>Press 7 key to select next building, Numpad 8/2/4/6 to move the selected building</p>
+    <p>Press B to toggle the building editor interface (changed from E to avoid conflict)</p>
+  </div>
+  
+  <div id="building-tools">
+    <button id="btn-grid">Grid Layout</button>
+    <button id="btn-circle">Circle Layout</button>
+    <button id="btn-town">Town Layout</button>
+    <button id="btn-editor">Toggle Editor</button>
+  </div>
+  
+  <div id="key-debug">
+    <h4>Key Press Debug:</h4>
+    <div id="key-log"></div>
+  </div>
+  
+  <!-- Import three.js -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js",
+        "three/examples/jsm/loaders/GLTFLoader.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/GLTFLoader.js",
+        "three/examples/jsm/loaders/DRACOLoader.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/DRACOLoader.js"
+      }
+    }
+  </script>
+  
+  <!-- Import main script that initializes the game -->
   <script type="module" src="./src/3js/ArenaGame.js"></script>
+  
+  <!-- Import building editor for interactive positioning -->
+  <script type="module" src="./src/3js/examples/building-editor.js"></script>
+  
+  <!-- Script for debugging key events -->
+  <script>
+    // Add global key event listener for debugging
+    document.addEventListener('keydown', function(event) {
+      console.log('Key pressed:', event.key, '(code:', event.code, ')');
+      
+      // Update debug display
+      const keyLog = document.getElementById('key-log');
+      if (keyLog) {
+        // Show only the last 5 key presses
+        if (keyLog.childElementCount > 4) {
+          keyLog.removeChild(keyLog.firstChild);
+        }
+        const keyInfo = document.createElement('div');
+        keyInfo.textContent = `${event.key} (${event.code})`;
+        keyLog.appendChild(keyInfo);
+      }
+      
+      // Check for specific keys used by the building editor
+      if (event.key === '7' || 
+          event.key === 'b' || event.key === 'B' ||
+          event.key === '8' || event.key === '2' || 
+          event.key === '4' || event.key === '6' ||
+          event.key === '9' || event.key === '3') {
+        console.log('Building editor key detected:', event.key);
+      }
+    });
+    
+    // Initialize BuildingEditor with debug mode
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('DOM loaded, waiting for game to initialize...');
+      
+      // Add button click handlers
+      document.getElementById('btn-grid').addEventListener('click', function() {
+        console.log('Grid layout button clicked');
+        if (window.game && window.game.environmentManager) {
+          organizeInGrid(window.game);
+        } else {
+          console.error('Game or EnvironmentManager not available');
+        }
+      });
+      
+      document.getElementById('btn-circle').addEventListener('click', function() {
+        console.log('Circle layout button clicked');
+        if (window.game && window.game.environmentManager) {
+          organizeInCircle(window.game);
+        } else {
+          console.error('Game or EnvironmentManager not available');
+        }
+      });
+      
+      document.getElementById('btn-town').addEventListener('click', function() {
+        console.log('Town layout button clicked');
+        if (window.game && window.game.environmentManager) {
+          setupTownLayout(window.game);
+        } else {
+          console.error('Game or EnvironmentManager not available');
+        }
+      });
+      
+      document.getElementById('btn-editor').addEventListener('click', function() {
+        console.log('Toggle editor button clicked');
+        if (window.buildingEditor) {
+          window.buildingEditor.toggleUI();
+        } else {
+          console.log('Building editor not found, creating it...');
+          try {
+            // Try to create a new instance
+            const BuildingEditor = window.BuildingEditor || this.BuildingEditor; 
+            const editor = new BuildingEditor(window.game);
+            editor.initialize();
+            window.buildingEditor = editor;
+          } catch (error) {
+            console.error('Failed to create building editor:', error);
+          }
+        }
+      });
+      
+      // Check if game is initialized every second
+      const checkInterval = setInterval(() => {
+        if (window.game) {
+          console.log('Game detected, loading building editor...');
+          
+          // Check if environment manager is available
+          if (window.game.environmentManager) {
+            console.log('Environment manager detected');
+            
+            // Load saved building layout
+            setTimeout(() => {
+              console.log('Loading saved building positions...');
+              loadSavedBuildingLayout(window.game);
+            }, 2000);
+            
+            // Try to load the editor manually if it doesn't load automatically
+            setTimeout(() => {
+              if (!window.buildingEditor) {
+                console.log('Creating building editor manually...');
+                try {
+                  // Call editor initialization code directly
+                  const manualEditor = new BuildingEditor(window.game);
+                  manualEditor.initialize();
+                  window.buildingEditor = manualEditor;
+                  console.log('Building editor initialized manually');
+                } catch (error) {
+                  console.error('Failed to create editor manually:', error);
+                }
+              }
+            }, 6000);
+          } else {
+            console.error('No environment manager found in game object:', window.game);
+          }
+          
+          clearInterval(checkInterval);
+        } else {
+          console.log('Waiting for game to initialize...');
+        }
+      }, 1000);
+    });
+    
+    // Function to load the saved building layout
+    function loadSavedBuildingLayout(game) {
+      if (!game || !game.environmentManager) {
+        console.error('Game or environmentManager not available');
+        return;
+      }
+      
+      console.log('Setting up saved building layout...');
+      
+      // Current building positions from user's layout
+      game.environmentManager.setPosition('Plane', 0.00, 0.00, 0.00);
+      game.environmentManager.setRotation('Plane', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('Plane', 1.00, 1.00, 1.00);
+      
+      game.environmentManager.setPosition('Arch', 0.00, 0.00, 0.00);
+      game.environmentManager.setRotation('Arch', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('Arch', 1.00, 1.00, 1.00);
+      
+      game.environmentManager.setPosition('WatchTower', 0.00, 2.00, 0.00);
+      game.environmentManager.setRotation('WatchTower', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('WatchTower', 1.00, 1.00, 1.00);
+      
+      game.environmentManager.setPosition('G_Angel_Altar', 0.00, 2.00, 0.00);
+      game.environmentManager.setRotation('G_Angel_Altar', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('G_Angel_Altar', 1.00, 1.00, 1.00);
+      
+      game.environmentManager.setPosition('fishing_club', 0.00, 0.00, 0.00);
+      game.environmentManager.setRotation('fishing_club', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('fishing_club', 1.00, 1.00, 1.00);
+      
+      game.environmentManager.setPosition('Town_Hall', 0.00, 2.00, 0.00);
+      game.environmentManager.setRotation('Town_Hall', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('Town_Hall', 1.00, 1.00, 1.00);
+      
+      game.environmentManager.setPosition('Bakery', 0.00, 2.00, 0.00);
+      game.environmentManager.setRotation('Bakery', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('Bakery', 1.00, 1.00, 1.00);
+      
+      game.environmentManager.setPosition('Woodcutter_house', 0.00, 2.00, 0.00);
+      game.environmentManager.setRotation('Woodcutter_house', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('Woodcutter_house', 1.00, 1.00, 1.00);
+      
+      game.environmentManager.setPosition('Templa_3', 0.00, 2.00, 0.00);
+      game.environmentManager.setRotation('Templa_3', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('Templa_3', 1.00, 1.00, 1.00);
+      
+      game.environmentManager.setPosition('Butcher', 0.00, 2.00, 0.00);
+      game.environmentManager.setRotation('Butcher', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('Butcher', 1.00, 1.00, 1.00);
+      
+      game.environmentManager.setPosition('Theater', 0.00, 2.00, 0.00);
+      game.environmentManager.setRotation('Theater', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('Theater', 1.00, 1.00, 1.00);
+      
+      game.environmentManager.setPosition('Coliseum', 0.00, 2.00, 0.00);
+      game.environmentManager.setRotation('Coliseum', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('Coliseum', 1.00, 1.00, 1.00);
+      
+      game.environmentManager.setPosition('Grape_Farm', 0.00, 2.00, 0.00);
+      game.environmentManager.setRotation('Grape_Farm', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('Grape_Farm', 1.00, 1.00, 1.00);
+      
+      game.environmentManager.setPosition('Warehouse', 0.00, 2.00, 0.00);
+      game.environmentManager.setRotation('Warehouse', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('Warehouse', 1.00, 1.00, 1.00);
+      
+      game.environmentManager.setPosition('Home', 0.00, 2.00, 0.00);
+      game.environmentManager.setRotation('Home', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('Home', 1.00, 1.00, 1.00);
+      
+      game.environmentManager.setPosition('Templa', 0.00, 2.00, 0.00);
+      game.environmentManager.setRotation('Templa', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('Templa', 1.00, 1.00, 1.00);
+      
+      game.environmentManager.setPosition('small_hospital', 0.00, 2.00, 0.00);
+      game.environmentManager.setRotation('small_hospital', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('small_hospital', 1.00, 1.00, 1.00);
+      
+      game.environmentManager.setPosition('Gold_mine', 0.00, 2.00, 0.00);
+      game.environmentManager.setRotation('Gold_mine', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('Gold_mine', 1.00, 1.00, 1.00);
+      
+      game.environmentManager.setPosition('Tavern', 0.00, 2.00, 0.00);
+      game.environmentManager.setRotation('Tavern', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('Tavern', 1.00, 1.00, 1.00);
+      
+      game.environmentManager.setPosition('Marketplace', 0.00, 2.00, 0.00);
+      game.environmentManager.setRotation('Marketplace', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('Marketplace', 1.00, 1.00, 1.00);
+      
+      game.environmentManager.setPosition('Marble_Mine_1', 0.00, 3.00, 0.00);
+      game.environmentManager.setRotation('Marble_Mine_1', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('Marble_Mine_1', 1.00, 1.00, 1.00);
+      
+      game.environmentManager.setPosition('Wheat_Farm', 0.00, 2.00, 0.00);
+      game.environmentManager.setRotation('Wheat_Farm', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('Wheat_Farm', 1.00, 1.00, 1.00);
+      
+      game.environmentManager.setPosition('Iron_mide', 0.00, 2.00, 0.00);
+      game.environmentManager.setRotation('Iron_mide', 0.0000, 0.0000, 0.0000);
+      game.environmentManager.setScale('Iron_mide', 1.00, 1.00, 1.00);
+      
+      console.log('Saved building layout loaded successfully');
+    }
+    
+    // Layout functions
+    function organizeInGrid(game) {
+      if (!game || !game.environmentManager) {
+        console.error('Game or environmentManager not available');
+        return;
+      }
+      
+      const buildingIds = game.environmentManager.getBuildingIds();
+      console.log('Organizing buildings in grid layout...', buildingIds);
+      
+      const gridSize = Math.ceil(Math.sqrt(buildingIds.length));
+      const spacing = 20;
+      
+      buildingIds.forEach((id, index) => {
+        const row = Math.floor(index / gridSize);
+        const col = index % gridSize;
+        
+        const x = (col - gridSize/2) * spacing;
+        const z = (row - gridSize/2) * spacing;
+        
+        console.log(`Positioning ${id} at (${x}, 0, ${z})`);
+        game.environmentManager.setPosition(id, x, 0, z);
+        game.environmentManager.setRotation(id, 0, 0, 0);
+      });
+      
+      console.log('Grid layout complete');
+    }
+    
+    function organizeInCircle(game) {
+      if (!game || !game.environmentManager) {
+        console.error('Game or environmentManager not available');
+        return;
+      }
+      
+      const buildingIds = game.environmentManager.getBuildingIds();
+      console.log('Organizing buildings in circle layout...', buildingIds);
+      
+      const radius = 50;
+      
+      buildingIds.forEach((id, index) => {
+        const angle = index * (Math.PI * 2 / buildingIds.length);
+        const x = Math.sin(angle) * radius;
+        const z = Math.cos(angle) * radius;
+        
+        console.log(`Positioning ${id} at (${x}, 0, ${z})`);
+        game.environmentManager.setPosition(id, x, 0, z);
+        game.environmentManager.setRotation(id, 0, angle + Math.PI, 0);
+      });
+      
+      console.log('Circle layout complete');
+    }
+    
+    function setupTownLayout(game) {
+      if (!game || !game.environmentManager) {
+        console.error('Game or environmentManager not available');
+        return;
+      }
+      
+      console.log('Setting up town layout...');
+      
+      const positions = [
+        // Format: [id, x, y, z]
+        ['Town_Hall', 0, 0, 0],
+        ['Marketplace', 0, 0, 20],
+        ['G_Angel_Altar', 15, 0, -15],
+        ['Templa', -15, 0, -15],
+        ['Templa_3', -25, 0, -15],
+        ['Theater', 25, 0, 10],
+        ['Coliseum', 35, 0, 25],
+        ['Tavern', 15, 0, 15],
+        ['Home', -15, 0, 15],
+        ['Bakery', -25, 0, 25],
+        ['Butcher', -25, 0, 10],
+        ['small_hospital', -15, 0, 25],
+        ['Wheat_Farm', 30, 0, -20],
+        ['Grape_Farm', 30, 0, -30],
+        ['Woodcutter_house', -30, 0, -30],
+        ['Gold_mine', 40, 0, -40],
+        ['Marble_Mine_1', 50, 0, -40],
+        ['Iron_mide', 40, 0, -50],
+        ['Arch', 0, 0, 40],
+        ['Warehouse', -30, 0, 30],
+        ['fishing_club', -20, 0, 40],
+        ['WatchTower', -50, 0, 0],
+        ['WatchTower', 50, 0, 0],
+        ['WatchTower', 0, 0, 50],
+        ['WatchTower', 0, 0, -50]
+      ];
+      
+      const availableBuildings = game.environmentManager.getBuildingIds();
+      console.log('Available buildings:', availableBuildings);
+      
+      // Only position buildings that actually exist
+      positions.forEach(([id, x, y, z]) => {
+        if (availableBuildings.includes(id)) {
+          console.log(`Positioning ${id} at (${x}, ${y}, ${z})`);
+          game.environmentManager.setPosition(id, x, y, z);
+          
+          // Special case for Town Hall
+          if (id === 'Town_Hall') {
+            game.environmentManager.setRotation(id, 0, Math.PI / 2, 0);
+          }
+        } else {
+          console.warn(`Building ${id} not found, skipping`);
+        }
+      });
+      
+      console.log('Town layout complete');
+    }
+  </script>
 </body>
-</html>
+</html> 

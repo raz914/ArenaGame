@@ -509,7 +509,8 @@ export class ModelLoader {
   // Method to rotate the character to face a direction
   rotateCharacter(angle) {
     if (this.character) {
-      // Update character rotation
+      // Update character rotatio
+      console.log("Rotating character to angle:", angle);
       this.character.rotation.y = angle;
     }
   }

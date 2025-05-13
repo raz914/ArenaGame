@@ -8,12 +8,13 @@ export class FollowCamera {
     // Camera follow settings
     this.offset = new THREE.Vector3(0, 3, 5); // Position offset behind and above player
     this.lookOffset = new THREE.Vector3(0, 1, 0); // Look slightly above player
-    this.damping = 0.1; // Smoothing factor (0 = instant, 1 = no movement)
+    this.damping = 0.1; // Smoothing factor for horizontal movement (0 = instant, 1 = no movement)
+    this.verticalDamping = 0.05; // Stronger damping for vertical movement to reduce wobble
     this.rotationDamping = 0.05; // Rotation smoothing
     
     // Orbit camera settings
     this.minDistance = 2; // Minimum distance from target
-    this.maxDistance = 15; // Maximum distance from target
+    this.maxDistance = 45; // Maximum distance from target
     this.zoomSpeed = 0.5; // How fast to zoom in/out with mouse wheel
     this.currentDistance = 5; // Current distance from target
     
@@ -23,12 +24,20 @@ export class FollowCamera {
     this.mouseSensitivity = 0.002; // Mouse sensitivity
     this.verticalAngleLimit = Math.PI / 2; // Increased limit for vertical rotation (90 degrees)
     
+    // Ground constraints
+    this.groundLevel = 0.5; // Minimum height above ground level
+    
     // Pointer lock flag
     this.pointerLocked = false;
     
     // Current camera target position
     this.currentPosition = new THREE.Vector3();
     this.currentLookAt = new THREE.Vector3();
+    
+    // Previous target position for velocity calculation
+    this.previousTargetY = 0;
+    this.targetYVelocity = 0;
+    this.verticalSmoothingFactor = 0.95; // Smooth out vertical movement
     
     // Initialize with camera's current position
     if (camera) {
@@ -58,20 +67,40 @@ export class FollowCamera {
     document.addEventListener('mousemove', function(event) {
       // Only rotate camera if pointer is locked
       if (self.pointerLocked) {
-      // Update horizontal and vertical angles based on mouse movement
-      self.horizontalAngle -= event.movementX * self.mouseSensitivity;
-      self.verticalAngle -= event.movementY * self.mouseSensitivity;
-      
-      // Limit vertical angle - allow more range for orbit camera
-      self.verticalAngle = Math.max(
-        -self.verticalAngleLimit,
-        Math.min(self.verticalAngleLimit, self.verticalAngle)
-      );
+        // Update horizontal and vertical angles based on mouse movement
+        self.horizontalAngle -= event.movementX * self.mouseSensitivity;
+        self.verticalAngle -= event.movementY * self.mouseSensitivity;
+        
+        // Limit vertical angle - allow more range for orbit camera
+        self.verticalAngle = Math.max(
+          -self.verticalAngleLimit,
+          Math.min(self.verticalAngleLimit, self.verticalAngle)
+        );
+        
+        // If vertical angle is too low, it could cause camera to go underground
+        // Check if we need to limit the downward angle to prevent this
+        if (self.verticalAngle < -Math.PI / 4) { // -45 degrees
+          // Check the theoretical camera height
+          const targetPosition = self.target ? self.target : new THREE.Vector3();
+          const playerHeight = targetPosition.y || 0;
+          const verticalDistance = self.currentDistance * Math.sin(self.verticalAngle);
+          const potentialHeight = playerHeight + self.offset.y + verticalDistance;
+          
+          // If the potential height is too low, adjust the vertical angle
+          if (potentialHeight < self.groundLevel) {
+            // Calculate the maximum downward angle that would keep us above ground
+            const maxDownAngle = Math.asin((self.groundLevel - playerHeight - self.offset.y) / self.currentDistance);
+            self.verticalAngle = Math.max(maxDownAngle, self.verticalAngle);
+          }
+        }
       }
     });
     
     // Add mouse wheel support for zooming in/out
     document.addEventListener('wheel', function(event) {
+      // Store old distance to check if we need to adjust vertical angle
+      const oldDistance = self.currentDistance;
+      
       // Adjust distance based on wheel movement
       self.currentDistance += event.deltaY * 0.01 * self.zoomSpeed;
       
@@ -80,6 +109,22 @@ export class FollowCamera {
         self.minDistance,
         Math.min(self.maxDistance, self.currentDistance)
       );
+      
+      // If we're zooming in and the vertical angle is negative (pointing down),
+      // check if we need to adjust the vertical angle to prevent going underground
+      if (self.currentDistance < oldDistance && self.verticalAngle < 0) {
+        const targetPosition = self.target ? self.target : new THREE.Vector3();
+        const playerHeight = targetPosition.y || 0;
+        const verticalDistance = self.currentDistance * Math.sin(self.verticalAngle);
+        const potentialHeight = playerHeight + self.offset.y + verticalDistance;
+        
+        // If the potential height is too low, adjust the vertical angle
+        if (potentialHeight < self.groundLevel) {
+          // Calculate the maximum downward angle that would keep us above ground
+          const maxDownAngle = Math.asin((self.groundLevel - playerHeight - self.offset.y) / self.currentDistance);
+          self.verticalAngle = Math.max(maxDownAngle, self.verticalAngle);
+        }
+      }
     });
     
     // Prevent context menu on right-click
@@ -117,10 +162,21 @@ export class FollowCamera {
     const offsetZ = Math.cos(totalHorizontalAngle) * horizontalDistance;
     const offsetY = this.offset.y + verticalDistance;
     
-    // Set target position
+    // Calculate vertical velocity for smoother vertical tracking
+    const currentTargetY = playerPosition.y;
+    this.targetYVelocity = (currentTargetY - this.previousTargetY) * 0.1; // Scale down velocity
+    this.previousTargetY = currentTargetY;
+    
+    // Apply smoothing to vertical velocity
+    this.targetYVelocity *= this.verticalSmoothingFactor;
+    
+    // Add a fixed height offset to keep camera higher than player
+    const fixedHeightOffset = 1.0;
+    
+    // Set target position with stabilized vertical position
     targetPosition.set(
       playerPosition.x - offsetX, 
-      playerPosition.y + offsetY, 
+      (playerPosition.y + offsetY + fixedHeightOffset) + this.targetYVelocity, 
       playerPosition.z - offsetZ
     );
     
@@ -131,8 +187,20 @@ export class FollowCamera {
       playerPosition.z
     );
     
-    // Smoothly interpolate current camera position to target position
-    this.currentPosition.lerp(targetPosition, 1 - this.damping);
+    // Separately handle horizontal and vertical interpolation with different damping values
+    // Horizontal position (x, z) - normal damping
+    this.currentPosition.x = this.currentPosition.x + (targetPosition.x - this.currentPosition.x) * (1 - this.damping);
+    this.currentPosition.z = this.currentPosition.z + (targetPosition.z - this.currentPosition.z) * (1 - this.damping);
+    
+    // Vertical position (y) - increased damping for smoother vertical movement
+    this.currentPosition.y = this.currentPosition.y + (targetPosition.y - this.currentPosition.y) * (1 - this.verticalDamping);
+    
+    // Ensure camera doesn't go below ground level
+    if (this.currentPosition.y < this.groundLevel) {
+      this.currentPosition.y = this.groundLevel;
+    }
+    
+    // Smooth look-at target
     this.currentLookAt.lerp(lookTarget, 1 - this.rotationDamping);
     
     // Apply position to the actual camera

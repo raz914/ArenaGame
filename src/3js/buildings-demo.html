@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arena Game with Buildings</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #000;
+    }
+    
+    #instructions {
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      background-color: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 10px;
+      border-radius: 5px;
+      font-family: Arial, sans-serif;
+      z-index: 100;
+      max-width: 400px;
+    }
+    
+    #building-tools {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background-color: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 10px;
+      border-radius: 5px;
+      font-family: Arial, sans-serif;
+      z-index: 100;
+    }
+    
+    button {
+      background-color: #4CAF50;
+      border: none;
+      color: white;
+      padding: 8px 12px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 14px;
+      margin: 4px 2px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    
+    button:hover {
+      background-color: #45a049;
+    }
+  </style>
+</head>
+<body>
+  <div id="instructions">
+    <h3>Arena Game with Buildings</h3>
+    <p>WASD to move, mouse to look around, Space to jump, Shift to run</p>
+    <p>Press 7 key to select next building, Numpad 8/2/4/6 to move the selected building</p>
+    <p>Press B to toggle the building editor interface (changed from E to avoid conflict)</p>
+  </div>
+  
+  <div id="building-tools">
+    <button id="btn-grid">Grid Layout</button>
+    <button id="btn-circle">Circle Layout</button>
+    <button id="btn-town">Town Layout</button>
+    <button id="btn-editor">Toggle Editor</button>
+  </div>
+  
+  <!-- Import three.js -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js",
+        "three/examples/jsm/loaders/GLTFLoader.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/GLTFLoader.js",
+        "three/examples/jsm/loaders/DRACOLoader.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/DRACOLoader.js"
+      }
+    }
+  </script>
+  
+  <!-- Import your game scripts -->
+  <script type="module">
+    // Import all necessary modules
+    import { ArenaGame } from './ArenaGame.js';
+    
+    // Add UI button handlers
+    document.addEventListener('DOMContentLoaded', () => {
+      // Wait for game to initialize
+      setTimeout(() => {
+        const game = window.game;
+        
+        // Grid layout button
+        document.getElementById('btn-grid').addEventListener('click', () => {
+          organizeInGrid(game);
+        });
+        
+        // Circle layout button
+        document.getElementById('btn-circle').addEventListener('click', () => {
+          organizeInCircle(game);
+        });
+        
+        // Town layout button
+        document.getElementById('btn-town').addEventListener('click', () => {
+          setupTownLayout(game);
+        });
+        
+        // Editor toggle button
+        document.getElementById('btn-editor').addEventListener('click', () => {
+          if (window.buildingEditor) {
+            window.buildingEditor.toggleUI();
+          } else {
+            // Create editor if it doesn't exist
+            const editor = new BuildingEditor(game);
+            editor.initialize();
+            window.buildingEditor = editor;
+          }
+        });
+      }, 5000);
+    });
+    
+    // Function to organize buildings in a grid
+    function organizeInGrid(game) {
+      if (!game || !game.environmentManager) return;
+      
+      const buildingIds = game.environmentManager.getBuildingIds();
+      console.log('Organizing buildings in grid layout...');
+      
+      const gridSize = Math.ceil(Math.sqrt(buildingIds.length));
+      const spacing = 20;
+      
+      buildingIds.forEach((id, index) => {
+        const row = Math.floor(index / gridSize);
+        const col = index % gridSize;
+        
+        const x = (col - gridSize/2) * spacing;
+        const z = (row - gridSize/2) * spacing;
+        
+        game.environmentManager.setPosition(id, x, 0, z);
+        game.environmentManager.setRotation(id, 0, 0, 0);
+      });
+    }
+    
+    // Function to organize buildings in a circle
+    function organizeInCircle(game) {
+      if (!game || !game.environmentManager) return;
+      
+      const buildingIds = game.environmentManager.getBuildingIds();
+      console.log('Organizing buildings in circle layout...');
+      
+      const radius = 50;
+      
+      buildingIds.forEach((id, index) => {
+        const angle = index * (Math.PI * 2 / buildingIds.length);
+        const x = Math.sin(angle) * radius;
+        const z = Math.cos(angle) * radius;
+        
+        game.environmentManager.setPosition(id, x, 0, z);
+        game.environmentManager.setRotation(id, 0, angle + Math.PI, 0);
+      });
+    }
+    
+    // Function to set up a town layout
+    function setupTownLayout(game) {
+      if (!game || !game.environmentManager) return;
+      
+      console.log('Setting up town layout...');
+      
+      // Town center with Town Hall
+      game.environmentManager.setPosition('Town_Hall', 0, 0, 0);
+      game.environmentManager.setRotation('Town_Hall', 0, Math.PI / 2, 0);
+      
+      // Marketplace in front of town hall
+      game.environmentManager.setPosition('Marketplace', 0, 0, 20);
+      
+      // Religious buildings
+      game.environmentManager.setPosition('G_Angel_Altar', 15, 0, -15);
+      game.environmentManager.setPosition('Templa', -15, 0, -15);
+      game.environmentManager.setPosition('Templa_3', -25, 0, -15);
+      
+      // Entertainment district
+      game.environmentManager.setPosition('Theater', 25, 0, 10);
+      game.environmentManager.setPosition('Coliseum', 35, 0, 25);
+      game.environmentManager.setPosition('Tavern', 15, 0, 15);
+      
+      // Housing area
+      game.environmentManager.setPosition('Home', -15, 0, 15);
+      
+      // Basic services
+      game.environmentManager.setPosition('Bakery', -25, 0, 25);
+      game.environmentManager.setPosition('Butcher', -25, 0, 10);
+      game.environmentManager.setPosition('small_hospital', -15, 0, 25);
+      
+      // Resources and production
+      game.environmentManager.setPosition('Wheat_Farm', 30, 0, -20);
+      game.environmentManager.setPosition('Grape_Farm', 30, 0, -30);
+      game.environmentManager.setPosition('Woodcutter_house', -30, 0, -30);
+      game.environmentManager.setPosition('Gold_mine', 40, 0, -40);
+      game.environmentManager.setPosition('Marble_Mine_1', 50, 0, -40);
+      game.environmentManager.setPosition('Iron_mide', 40, 0, -50);
+      
+      // Decorative & functional structures
+      game.environmentManager.setPosition('Arch', 0, 0, 40);
+      game.environmentManager.setPosition('Warehouse', -30, 0, 30);
+      game.environmentManager.setPosition('fishing_club', -20, 0, 40);
+      
+      // Defensive structures
+      game.environmentManager.setPosition('WatchTower', -50, 0, 0);
+      game.environmentManager.setPosition('WatchTower', 50, 0, 0);
+      game.environmentManager.setPosition('WatchTower', 0, 0, 50);
+      game.environmentManager.setPosition('WatchTower', 0, 0, -50);
+    }
+    
+    // BuildingEditor class (simplified version for the HTML file)
+    class BuildingEditor {
+      constructor(game) {
+        this.game = game;
+        this.selectedBuildingId = null;
+        this.allBuildingIds = [];
+        this.uiOverlay = null;
+        this.isActive = false;
+      }
+      
+      initialize() {
+        this.allBuildingIds = this.game.environmentManager.getBuildingIds();
+        this.createUI();
+        this.isActive = true;
+      }
+      
+      createUI() {
+        this.uiOverlay = document.createElement('div');
+        this.uiOverlay.id = 'building-editor-overlay';
+        this.uiOverlay.style.position = 'fixed';
+        this.uiOverlay.style.top = '10px';
+        this.uiOverlay.style.right = '10px';
+        this.uiOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+        this.uiOverlay.style.color = 'white';
+        this.uiOverlay.style.padding = '10px';
+        this.uiOverlay.style.borderRadius = '5px';
+        this.uiOverlay.style.fontFamily = 'monospace';
+        this.uiOverlay.style.zIndex = '1000';
+        this.uiOverlay.style.width = '300px';
+        
+        this.uiOverlay.innerHTML = `
+          <h3>Building Editor</h3>
+          <p>7 - Next building</p>
+          <p>Numpad 8/2/4/6 - Move building</p>
+          <p>Numpad 9/3 - Move up/down</p>
+          <p>J/L - Rotate Y axis (changed from Q/E)</p>
+          <p>S - Print positions to console</p>
+          <p>B - Toggle editor UI (changed from E)</p>
+          <p>Full controls in building-editor.js</p>
+        `;
+        
+        document.body.appendChild(this.uiOverlay);
+      }
+      
+      toggleUI() {
+        if (this.uiOverlay) {
+          this.uiOverlay.style.display = this.uiOverlay.style.display === 'none' ? 'block' : 'none';
+        }
+      }
+    }
+  </script>
+  
+  <!-- Import main script that initializes the game -->
+  <script type="module" src="../ArenaGame.js"></script>
+  
+  <!-- Import building editor for interactive positioning -->
+  <script type="module" src="../examples/building-editor.js"></script>
+</body>
+</html> 
