@@ -1,16 +1,18 @@
+// Enhanced ModelLoader with animation state management based on your previous implementation
+
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import { AnimationManager } from './AnimationManager.js';
 
 export class ModelLoader {
   constructor(scene, updateCameraCallback) {
     this.scene = scene;
     this.updateCameraCallback = updateCameraCallback;
     this.modelPath = "./assets/models/ground.glb"; // Default ground model path
-    this.characterPath = "./assets/models/gladiator.glb"; // Default character model path
+    this.characterPath = "./assets/models/ee.glb"; // Default character model path
     
     // Model-related properties
-    this.mixer = null;
     this.model = null;
     this.character = null;
     this.isModelLoaded = false;
@@ -19,6 +21,9 @@ export class ModelLoader {
     this.loaderOverlay = null;
     this.loaderPercentage = null;
     this.progressBar = null;
+    
+    // Create the animation manager
+    this.animationManager = new AnimationManager();
     
     // Create GLTF and Draco loaders
     this.gltfLoader = null;
@@ -180,38 +185,163 @@ export class ModelLoader {
   }
   
   loadModel() {
-    // Load the ground model
-    this.gltfLoader.load(
-      this.modelPath,
-      (gltf) => {
-        // Store the model
-        this.model = gltf.scene;
+    // Create a textured ground plane instead of loading a 3D model
+    // Load textures first
+    const textureLoader = new THREE.TextureLoader();
+    
+    // Add a console.log to check when texture loading starts
+    console.log("Starting to load ground texture");
+    
+    // Create a procedural texture (checkerboard) that's definitely visible
+    const size = 512;
+    const data = new Uint8Array(size * size * 4);
+    
+    for (let i = 0; i < size; i++) {
+      for (let j = 0; j < size; j++) {
+        const stride = (i * size + j) * 4;
         
-        // Center and scale the model
-        this.processModel(gltf);
-        this.model.scale.set(15, 1, 15); // Reset scale to 1 for consistency
+        // Create a checkerboard pattern
+        const isCheckerboard = ((i & 32) === 0) !== ((j & 32) === 0);
         
-        // Add the model to the scene
-        this.scene.add(this.model);
+        // Set RGBA values
+        data[stride] = isCheckerboard ? 200 : 150;     // R
+        data[stride + 1] = isCheckerboard ? 180 : 120; // G
+        data[stride + 2] = isCheckerboard ? 150 : 100; // B
+        data[stride + 3] = 255;                        // A (fully opaque)
+      }
+    }
+    
+    // Create the texture from data
+    const procedualTexture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+    procedualTexture.wrapS = THREE.RepeatWrapping;
+    procedualTexture.wrapT = THREE.RepeatWrapping;
+    procedualTexture.repeat.set(4, 4);
+    procedualTexture.needsUpdate = true;
+    
+    // Try different path formats
+    const texturePath = 'public/assets/textures/tex_ground.jpg'; // Try with public prefix
+    console.log("Attempting to load texture from:", texturePath);
+    
+    // Use absolute path to ensure textures are found
+    const groundTexture = textureLoader.load(texturePath, 
+      // Success callback
+      (texture) => {
+        console.log("Ground texture loaded successfully");
+        // Set texture properties for better quality and visibility
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(4, 4); // Reduced repeat for higher resolution
+        texture.anisotropy = 16; // Improve texture sharpness
         
-        // Setup animation mixer if model has animations
-        // if (gltf.animations.length > 0) {
-        //   this.mixer = new THREE.AnimationMixer(this.model);
-          
-        //   // Play all animations by default
-        //   gltf.animations.forEach((clip) => {
-        //     // this.mixer.clipAction(clip).play();
-        //   });
-        // }
-        
-        // Now load the character model
-        this.loadCharacter();
+        // Update material after texture is loaded to ensure it's applied
+        if (this.model && this.model.material) {
+          this.model.material.needsUpdate = true;
+        }
       },
-      (xhr) => {
-        // Progress is handled by the loading manager
-      },
+      // Progress callback
+      undefined,
+      // Error callback
       (error) => {
-        console.error('An error occurred loading the ground model:', error);
+        console.error("Error loading ground texture:", error);
+      }
+    );
+    
+    // Create a plane geometry for the ground
+    const groundSize = 150; // Large ground size
+    const groundGeometry = new THREE.PlaneGeometry(groundSize, groundSize);
+    
+    // Create material with the textures
+    const groundMaterial = new THREE.MeshStandardMaterial({
+      map: procedualTexture, // Use our procedural texture instead
+      color: 0xccbb99, // Tan/sand color as base
+      roughness: 0.8,
+      metalness: 0.2
+    });
+    
+    // In case texture fails to load, set a visible pattern
+    groundMaterial.onBeforeCompile = function(shader) {
+      console.log("Material compilation started");
+    };
+    
+    // Create the ground mesh
+    this.model = new THREE.Mesh(groundGeometry, groundMaterial);
+    
+    // Rotate the plane to be horizontal (by default PlaneGeometry is vertical)
+    this.model.rotation.x = -Math.PI / 2;
+    
+    // Enable shadows for the ground
+    this.model.receiveShadow = true;
+    
+    // Add the ground plane to the scene
+    this.scene.add(this.model);
+    
+    // Add a grid helper to make the ground more visible
+    const gridHelper = new THREE.GridHelper(100, 20, 0xff0000, 0x0000ff);
+    gridHelper.position.y = 0.01; // Raise slightly above the ground to prevent z-fighting
+    // this.scene.add(gridHelper);
+    
+    // Add a spotlight aimed at the ground to highlight the texture
+    const spotlight = new THREE.SpotLight(0xffffff, 1.5);
+    spotlight.position.set(0, 30, 0);
+    spotlight.target = this.model;
+    spotlight.angle = Math.PI / 4;
+    spotlight.penumbra = 0.1;
+    spotlight.decay = 1;
+    spotlight.distance = 100;
+    spotlight.castShadow = true;
+    spotlight.shadow.mapSize.width = 1024;
+    spotlight.shadow.mapSize.height = 1024;
+    this.scene.add(spotlight);
+    
+    console.log("Created textured ground plane");
+    
+    // Try to load the real texture in the background
+    // Try multiple texture paths in sequence
+    const possiblePaths = [
+      './assets/textures/tex_ground.jpg',
+      '/assets/textures/tex_ground.jpg',
+      'public/assets/textures/tex_ground.jpg',
+      '../public/assets/textures/tex_ground.jpg',
+      'assets/textures/tex_ground.jpg'
+    ];
+    
+    // Try loading each path
+    this.tryLoadingTextures(possiblePaths, (loadedTexture) => {
+      console.log("Successfully loaded texture!");
+      loadedTexture.wrapS = THREE.RepeatWrapping;
+      loadedTexture.wrapT = THREE.RepeatWrapping;
+      loadedTexture.repeat.set(4, 4);
+      
+      // Update the material with the successfully loaded texture
+      this.model.material.map = loadedTexture;
+      this.model.material.needsUpdate = true;
+    });
+    
+    // Now load the character model
+    this.loadCharacter();
+  }
+  
+  // Helper method to try loading textures from multiple paths
+  tryLoadingTextures(paths, onSuccess) {
+    if (paths.length === 0) {
+      console.warn("All texture paths failed to load");
+      return;
+    }
+    
+    const path = paths[0];
+    console.log(`Trying texture path: ${path}`);
+    
+    new THREE.TextureLoader().load(
+      path,
+      (texture) => {
+        console.log(`Successfully loaded texture from: ${path}`);
+        if (onSuccess) onSuccess(texture);
+      },
+      undefined,
+      (error) => {
+        console.warn(`Failed to load texture from ${path}:`, error);
+        // Try next path
+        this.tryLoadingTextures(paths.slice(1), onSuccess);
       }
     );
   }
@@ -224,29 +354,35 @@ export class ModelLoader {
         // Store the character
         this.character = gltf.scene;
         
-        // Process the character model
-        // this.processCharacter(gltf);
+        // Position character slightly above ground
+        this.character.position.set(0, 0, 0);
+        
+        // Enable shadows for all meshes in the character model
+        this.character.traverse((node) => {
+          if (node.isMesh) {
+            node.castShadow = true;
+            node.receiveShadow = true;
+            
+            // Improve material quality
+            if (node.material) {
+              node.material.roughness = Math.max(0.4, node.material.roughness || 0.5);
+              node.material.metalness = Math.min(0.8, node.material.metalness || 0.2);
+              
+              // Improve texture quality if present
+              if (node.material.map) {
+                node.material.map.anisotropy = 16;
+              }
+            }
+          }
+        });
         
         // Add the character to the scene
         this.scene.add(this.character);
         
-        // Setup animation mixer for character animations
-        if (gltf.animations.length > 0) {
-          this.characterMixer = new THREE.AnimationMixer(this.character);
-          
-          // Store animations for later use
-          this.characterAnimations = gltf.animations;
-          
-        //   Play idle animation by default if it exists
-          const idleAnim = this.characterAnimations.find(clip => 
-            clip.name == "Armature.001|mixamo.com|Layer0.019"
-          );
-          
-          if (idleAnim) {
-            console.log('Playing idle animation:', idleAnim.name);
-            const action = this.characterMixer.clipAction(idleAnim);
-            action.play();
-          }
+        // Setup animation mixer and actions
+        if (gltf.animations && gltf.animations.length > 0) {
+          // Initialize animations using the animation manager
+          this.animationManager.setupAnimations(this.character, gltf.animations);
         }
         
         console.log('Character model loaded successfully');
@@ -307,53 +443,15 @@ export class ModelLoader {
     });
   }
   
-  processCharacter(gltf) {
-    // Get the character scene
-    const character = gltf.scene;
-    
-    // Calculate the bounding box
-    const box = new THREE.Box3().setFromObject(character);
-    const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
-    
-    // Place the character at a reasonable position on the terrain
-    character.position.set(0, 0.1, 0); // Slightly above the ground to prevent z-fighting
-    
-    // Scale character to appropriate size
-    const characterScale = 1.0; // Adjust as needed based on your character model
-    character.scale.set(characterScale, characterScale, characterScale);
-    
-    // Enable shadows for all meshes
-    character.traverse((node) => {
-      if (node.isMesh) {
-        node.castShadow = true;
-        node.receiveShadow = true;
-        
-        // Improve material quality if needed
-        if (node.material) {
-          // Ensure materials use physically correct lighting
-          node.material.roughness = Math.max(0.4, node.material.roughness || 0.5);
-          
-          // If model has low-res textures, limit anisotropy to improve appearance
-          if (node.material.map) {
-            node.material.map.anisotropy = 4;
-          }
-        }
-      }
-    });
-  }
-  
   // Method to update animations
   updateAnimations(deltaTime) {
-    // Update ground model animations
-    // if (this.mixer) {
-    //   this.mixer.update(deltaTime);
-    // }
-    
-    // Update character animations
-    if (this.characterMixer) {
-      this.characterMixer.update(deltaTime);
-    }
+    // Update animations via animation manager
+    this.animationManager.update(deltaTime);
+  }
+  
+  // Method to play a specific character animation
+  playCharacterAnimation(animationName) {
+    return this.animationManager.setState(animationName);
   }
   
   // Method to change the model
@@ -364,7 +462,6 @@ export class ModelLoader {
     if (this.model) {
       this.scene.remove(this.model);
       this.model = null;
-      this.mixer = null;
     }
     
     // Reset loading state
@@ -388,7 +485,9 @@ export class ModelLoader {
     if (this.character) {
       this.scene.remove(this.character);
       this.character = null;
-      this.characterMixer = null;
+      
+      // Reset animation manager
+      this.animationManager.resetAnimations();
     }
     
     // Reset character loading state
@@ -413,25 +512,5 @@ export class ModelLoader {
       // Update character rotation
       this.character.rotation.y = angle;
     }
-  }
-  
-  // Method to play a specific character animation
-  playCharacterAnimation(animationName) {
-    if (this.characterMixer && this.characterAnimations) {
-      // Find the requested animation
-      const animation = this.characterAnimations.find(clip => 
-        clip.name.toLowerCase().includes(animationName.toLowerCase())
-      );
-      
-      if (animation) {
-        // Stop all current animations and play the requested one
-        this.characterMixer.stopAllAction();
-        const action = this.characterMixer.clipAction(animation);
-        console.log('Playing animation:', animation.name);
-        action.play();
-        return true;
-      }
-    }
-    return false;
   }
 }

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { FollowCamera } from './FollowCamera.js';
 
 export class SceneManager {
   constructor() {
@@ -11,21 +11,26 @@ export class SceneManager {
     // Utility properties
     this.clock = new THREE.Clock();
     this.mouse = new THREE.Vector2();
-    this.controls = null;
+    
+    // Pointer lock state
+    this.isPointerLocked = false;
+    
+    // Add follow camera (always active)
+    this.followCamera = new FollowCamera(this.camera);
     
     console.log("SceneManager initialized");
     
     // Setup environment
     this.setupEnvironment();
     
-    // Add orbit controls
-    this.setupControls();
-    
     // Handle window resize
     this.handleResize();
     
     // Set up mouse events
     this.setupMouseEvents();
+    
+    // Initialize pointer lock controls
+    this.setupPointerLock();
     
     // Start the animation loop
     this.animate();
@@ -84,55 +89,53 @@ export class SceneManager {
     this.addLights();
     
     // Add grid helper (optional - helps with orientation)
-    const gridHelper = new THREE.GridHelper(10, 10);
-    this.scene.add(gridHelper);
+    // const gridHelper = new THREE.GridHelper(100, 100);
+    // this.scene.add(gridHelper);
   }
   
   addLights() {
-    // Ambient light for general illumination
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    // Ambient light for general illumination - reduced intensity for more contrast
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
     this.scene.add(ambientLight);
     
-    // Main directional light with shadows
-    const mainLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    mainLight.position.set(5, 10, 5);
+    // Main directional light (sun) with enhanced shadows
+    const mainLight = new THREE.DirectionalLight(0xfffaf0, 1.5); // Warm sunlight color
+    mainLight.position.set(50, 100, 50); // Higher position for more overhead sun effect
     mainLight.castShadow = true;
     
-    // Configure shadow properties
-    mainLight.shadow.mapSize.width = 2048;
-    mainLight.shadow.mapSize.height = 2048;
+    // Enhanced shadow properties for better quality
+    mainLight.shadow.mapSize.width = 4096; // Increased resolution
+    mainLight.shadow.mapSize.height = 4096;
     mainLight.shadow.camera.near = 0.5;
-    mainLight.shadow.camera.far = 50;
-    mainLight.shadow.camera.left = -10;
-    mainLight.shadow.camera.right = 10;
-    mainLight.shadow.camera.top = 10;
-    mainLight.shadow.camera.bottom = -10;
+    mainLight.shadow.camera.far = 500;
+    mainLight.shadow.camera.left = -100;
+    mainLight.shadow.camera.right = 100;
+    mainLight.shadow.camera.top = 100;
+    mainLight.shadow.camera.bottom = -100;
+    
+    // Softer shadows
+    mainLight.shadow.radius = 2;
+    mainLight.shadow.bias = -0.0001;
     
     this.scene.add(mainLight);
     
-    // Additional lights for better illumination
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.5);
-    fillLight.position.set(-5, 5, -5);
+    // Add a subtle fill light from the opposite direction
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+    fillLight.position.set(-50, 30, -50);
+    fillLight.castShadow = true;
+    fillLight.shadow.mapSize.width = 2048;
+    fillLight.shadow.mapSize.height = 2048;
     this.scene.add(fillLight);
     
-    // Add a soft point light
-    const pointLight = new THREE.PointLight(0xffffcc, 0.8, 20);
-    pointLight.position.set(0, 5, 0);
-    this.scene.add(pointLight);
+    // Add a subtle rim light for better character definition
+    const rimLight = new THREE.DirectionalLight(0xffffff, 0.2);
+    rimLight.position.set(0, 20, -50);
+    this.scene.add(rimLight);
   }
   
-  setupControls() {
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.05;
-    this.controls.screenSpacePanning = false;
-    this.controls.minDistance = 2;
-    this.controls.maxDistance = 20;
-    this.controls.maxPolarAngle = Math.PI / 2; // Limit vertical rotation
-    
-    // Set initial control target
-    this.controls.target.set(0, 0, 0);
-    this.controls.update();
+  // Update camera to follow character
+  updateFollowCamera(characterPosition, characterRotation) {
+    this.followCamera.update(characterPosition, characterRotation);
   }
   
   handleResize() {
@@ -143,6 +146,39 @@ export class SceneManager {
       
       // Update renderer
       this.renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  }
+  
+  setupPointerLock() {
+    const canvas = this.renderer.domElement;
+    
+    // Pointer lock event listeners
+    document.addEventListener('click', () => {
+      // Request pointer lock when canvas is clicked
+      if (!this.isPointerLocked) {
+        canvas.requestPointerLock();
+      }
+    });
+    
+    // Track pointer lock state changes
+    document.addEventListener('pointerlockchange', () => {
+      if (document.pointerLockElement === canvas) {
+        this.isPointerLocked = true;
+        console.log('Pointer locked');
+      } else {
+        this.isPointerLocked = false;
+        console.log('Pointer lock released');
+      }
+      
+      // Update follow camera pointer lock state
+      if (this.followCamera) {
+        this.followCamera.setPointerLocked(this.isPointerLocked);
+      }
+    });
+    
+    // Handle error
+    document.addEventListener('pointerlockerror', () => {
+      console.error('Pointer lock error');
     });
   }
   
@@ -163,21 +199,12 @@ export class SceneManager {
   animate() {
     requestAnimationFrame(this.animate.bind(this));
     
-    // Update controls
-    if (this.controls) {
-      this.controls.update();
-    }
-    
     // Render the scene
     this.renderer.render(this.scene, this.camera);
   }
   
-  // Add a method to update camera and controls based on model
+  // Adjust initial camera position (used when first loading the scene)
   updateCameraForModel(center, size) {
-    // Update controls target based on model center
-    this.controls.target.set(0, size.y / 4, 0); // Target slightly above the base
-    this.controls.update();
-    
     // Adjust camera to frame model
     const distance = size.length() * 1.5;
     this.camera.position.set(
